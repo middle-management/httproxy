@@ -1,21 +1,41 @@
-on: 
+name: Release
+
+on:
   release:
     types: [created]
 
+permissions:
+  contents: write
+
 jobs:
-  releases-matrix:
-    name: Release Go Binary
+  build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, windows, darwin]
-        goarch: ["386", amd64]
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+
     steps:
-    - uses: actions/checkout@v2
-    - uses: wangyoucao577/go-release-action@master
-      env:
-        CGO_ENABLED: 0
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        goos: ${{ matrix.goos }}
-        goarch: ${{ matrix.goarch }}
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: |
+          ext=""; if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          name="httproxy-${GOOS}-${GOARCH}${ext}"
+          go build -ldflags="-s -w" -o "dist/${name}" .
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+
+      - name: Upload asset
+        run: gh release upload "$TAG" dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
